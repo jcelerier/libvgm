@@ -42,51 +42,24 @@
 #include <string.h>	// for memset()
 #include <math.h>	// for pow()
 
-#include "../../stdtype.h"
-#include "../snddef.h"
-#include "../EmuStructs.h"
-#include "../EmuCores.h"
-#include "../EmuHelper.h"
-#include "c6280_mame.h"
+// Local standalone adaptation: no libvgm framework or unlicensed helper headers.
+#include <stdint.h>
+typedef uint8_t UINT8;
+typedef uint16_t UINT16;
+typedef uint32_t UINT32;
+typedef int16_t INT16;
+typedef int32_t DEV_SMPL;
 
 
 static void c6280mame_w(void *chip, UINT8 offset, UINT8 data);
 static UINT8 c6280mame_r(void* chip, UINT8 offset);
 
 static void c6280mame_update(void* param, UINT32 samples, DEV_SMPL **outputs);
-static UINT8 device_start_c6280_mame(const DEV_GEN_CFG* cfg, DEV_INFO* retDevInf);
 static void* device_start_c6280mame(UINT32 clock, UINT32 rate);
 static void device_stop_c6280mame(void* chip);
 static void device_reset_c6280mame(void* chip);
 
 static void c6280mame_set_mute_mask(void* chip, UINT32 MuteMask);
-
-
-static DEVDEF_RWFUNC devFunc[] =
-{
-	{RWF_REGISTER | RWF_WRITE, DEVRW_A8D8, 0, c6280mame_w},
-	{RWF_REGISTER | RWF_READ, DEVRW_A8D8, 0, c6280mame_r},
-	{RWF_CHN_MUTE | RWF_WRITE, DEVRW_ALL, 0, c6280mame_set_mute_mask},
-	{0x00, 0x00, 0, NULL}
-};
-DEV_DEF devDef_C6280_MAME =
-{
-	"HuC6280", "MAME", FCC_MAME,
-	
-	device_start_c6280_mame,
-	device_stop_c6280mame,
-	device_reset_c6280mame,
-	c6280mame_update,
-	
-	NULL,	// SetOptionBits
-	c6280mame_set_mute_mask,
-	NULL,	// SetPanning
-	NULL,	// SetSampleRateChangeCallback
-	NULL,	// SetLoggingCallback
-	NULL,	// LinkDevice
-	
-	devFunc,	// rwFuncs
-};
 
 
 typedef struct {
@@ -104,8 +77,6 @@ typedef struct {
 } t_channel;
 
 typedef struct {
-	DEV_DATA _devData;
-	
 	UINT8 select;
 	UINT8 balance;
 	UINT8 lfo_frequency;
@@ -397,28 +368,6 @@ static void c6280mame_update(void* param, UINT32 samples, DEV_SMPL **outputs)
 }
 
 
-/*--------------------------------------------------------------------------*/
-/* MAME specific code                                                       */
-/*--------------------------------------------------------------------------*/
-
-static UINT8 device_start_c6280_mame(const DEV_GEN_CFG* cfg, DEV_INFO* retDevInf)
-{
-	void* chip;
-	DEV_DATA* devData;
-	UINT32 rate;
-	
-	rate = cfg->clock / 16;
-	SRATE_CUSTOM_HIGHEST(cfg->srMode, rate, cfg->smplRate);
-	
-	chip = device_start_c6280mame(cfg->clock, rate);
-	if (chip == NULL)
-		return 0xFF;
-	
-	devData = (DEV_DATA*)chip;
-	devData->chipInf = chip;
-	INIT_DEVINF(retDevInf, devData, rate, &devDef_C6280_MAME);
-	return 0x00;
-}
 
 static void* device_start_c6280mame(UINT32 clock, UINT32 rate)
 {

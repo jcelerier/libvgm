@@ -62,6 +62,12 @@ static void device_reset_c6280mame(void* chip);
 static void c6280mame_set_mute_mask(void* chip, UINT32 MuteMask);
 
 
+/* Local: five waveform-index bits and 32 fractional bits. The original
+ * 12-bit fraction merged distinct hardware dividers at clock/16 rendering. */
+#define WAVE_FRAC_BITS 32
+#define WAVE_PHASE_MASK ((UINT64_C(32) << WAVE_FRAC_BITS) - 1)
+
+
 typedef struct {
 	UINT16 frequency;
 	UINT8 control;
@@ -72,7 +78,7 @@ typedef struct {
 	UINT8 noise_control;
 	UINT32 noise_counter;
 	UINT32 noise_seed;
-	UINT32 counter;
+	uint64_t counter;
 	UINT8 Muted;
 } t_channel;
 
@@ -84,7 +90,7 @@ typedef struct {
 	t_channel channel[8];	// is 8, because: p->select = data & 0x07;
 	INT16 volume_table[32];
 	UINT32 noise_freq_tab[32];
-	UINT32 wave_freq_tab[4096];
+	uint64_t wave_freq_tab[4096];
 } c6280_t;
 
 
@@ -102,8 +108,8 @@ static void c6280_calculate_clocks(c6280_t *p, double clk, double rate)
 	/* Make waveform frequency table */
 	for (i = 0; i < 4096; i += 1)
 	{
-		step = ((clk / rate) * 4096) / (i+1);
-		p->wave_freq_tab[(1 + i) & 0xFFF] = (UINT32)step;
+		step = ((clk / rate) * (UINT64_C(1) << WAVE_FRAC_BITS)) / (i+1);
+		p->wave_freq_tab[(1 + i) & 0xFFF] = (uint64_t)step;
 	}
 
 	/* Make noise frequency table */
@@ -330,18 +336,18 @@ static void c6280mame_update(void* param, UINT32 samples, DEV_SMPL **outputs)
 							}
 							else
 							{
-								int lfooffset = (lfo_srcchan->counter >> 12) & 0x1F;
+								int lfooffset = (lfo_srcchan->counter >> WAVE_FRAC_BITS) & 0x1F;
 								INT16 lfo_data = lfo_srcchan->waveform[lfooffset];
 								lfo_srcchan->counter += p->wave_freq_tab[(lfo_step * p->lfo_frequency) & 0xfff]; // verified from manual
-								lfo_srcchan->counter &= 0x1FFFF;
-								lfo_srcchan->index = (lfo_srcchan->counter >> 12) & 0x1F;
+								lfo_srcchan->counter &= WAVE_PHASE_MASK;
+								lfo_srcchan->index = (lfo_srcchan->counter >> WAVE_FRAC_BITS) & 0x1F;
 								step += ((lfo_data - 16) * (1 << (((p->lfo_control & 3) - 1) << 1))); // local: avoid shifting a negative signed value
 							}
-							offset = (lfo_dstchan->counter >> 12) & 0x1F;
+							offset = (lfo_dstchan->counter >> WAVE_FRAC_BITS) & 0x1F;
 							data = lfo_dstchan->waveform[offset];
 							lfo_dstchan->counter += p->wave_freq_tab[step & 0xfff];
-							lfo_dstchan->counter &= 0x1FFFF;
-							lfo_dstchan->index = (lfo_dstchan->counter >> 12) & 0x1F;
+							lfo_dstchan->counter &= WAVE_PHASE_MASK;
+							lfo_dstchan->index = (lfo_dstchan->counter >> WAVE_FRAC_BITS) & 0x1F;
 							outputs[0][i] += (vll * (data - 16));
 							outputs[1][i] += (vlr * (data - 16));
 						}
@@ -350,14 +356,14 @@ static void c6280mame_update(void* param, UINT32 samples, DEV_SMPL **outputs)
 				else
 				{
 					/* Waveform mode */
-					UINT32 step = p->wave_freq_tab[chan->frequency];
+					uint64_t step = p->wave_freq_tab[chan->frequency];
 					for (i = 0; i < samples; i++)
 					{
-						UINT8 offset = (chan->counter >> 12) & 0x1F;
+						UINT8 offset = (chan->counter >> WAVE_FRAC_BITS) & 0x1F;
 						INT16 data = chan->waveform[offset];
 						chan->counter += step;
-						chan->counter &= 0x1FFFF;
-						chan->index = (chan->counter >> 12) & 0x1F;
+						chan->counter &= WAVE_PHASE_MASK;
+						chan->index = (chan->counter >> WAVE_FRAC_BITS) & 0x1F;
 						outputs[0][i] += (vll * (data - 16));
 						outputs[1][i] += (vlr * (data - 16));
 					}

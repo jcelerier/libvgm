@@ -335,7 +335,7 @@ static void c6280mame_update(void* param, UINT32 samples, DEV_SMPL **outputs)
 								lfo_srcchan->counter += p->wave_freq_tab[(lfo_step * p->lfo_frequency) & 0xfff]; // verified from manual
 								lfo_srcchan->counter &= 0x1FFFF;
 								lfo_srcchan->index = (lfo_srcchan->counter >> 12) & 0x1F;
-								step += ((lfo_data - 16) << (((p->lfo_control & 3) - 1) << 1)); // verified from manual
+								step += ((lfo_data - 16) * (1 << (((p->lfo_control & 3) - 1) << 1))); // local: avoid shifting a negative signed value
 							}
 							offset = (lfo_dstchan->counter >> 12) & 0x1F;
 							data = lfo_dstchan->waveform[offset];
